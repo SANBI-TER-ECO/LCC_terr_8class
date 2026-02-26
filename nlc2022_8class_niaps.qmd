@@ -115,7 +115,7 @@ outfile <- file.path(out_dir, "niaps_sum_rc.tif")
    # Write a compressed Geo Tiff
 writeRaster(niaps_sum_rc, outfile, datatype = "INT1U", gdal = c("COMPRESS=LZW"), overwrite = TRUE)
 
-# niaps_sum_rc <- rast("C:/Users/skownoa/Dropbox/NBAwork/R_outputs/niaps_sum_rc.tif")
+ #lc2022_8class_niaps50 <- rast("C:/Users/skownoa/Dropbox/NBAwork/R_outputs/lc2022_8class_niaps50.tif")
 ```
 
 #### Analysis
@@ -127,9 +127,18 @@ Combine the NLC2022 and NIAPS data such that IF the land cover is "natural" (VAL
 
 lc2022_8class_niaps50 <-  ifel(niaps_sum_rc >= 5 & lc2022 == 1, 8, lc2022)
 
+# Aggregate to 100m resolution 
+lc2022_8class_niaps50_100m <- aggregate(lc2022_8class_niaps50, fact = 5, fun = "modal", na.rm = TRUE)
+
+# output 100m version 
+# Set output file path and name (out dir previously defined)
+outfile <- file.path(out_dir, "lc2022_8class_niaps50_100m.tif")
+# Write a compressed Geo Tiff
+writeRaster(lc2022_8class_niaps50_100m, outfile, datatype = "INT1U", gdal = c("COMPRESS=LZW"), overwrite = TRUE)
+
+#output the 20m version 
 # Set output file path and name (out dir previously defined)
 outfile <- file.path(out_dir, "lc2022_8class_niaps50.tif")
-
 # Write a compressed Geo Tiff
 writeRaster(lc2022_8class_niaps50, outfile, datatype = "INT1U", gdal = c("COMPRESS=LZW"), overwrite = TRUE)
 ```

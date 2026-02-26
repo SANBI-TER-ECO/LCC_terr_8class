@@ -1,10 +1,10 @@
-## Workflow for combining invasive plant data (2024) with a 7 class version of the national land cover of South Africa (2022), to produce an 8 class land cover raster.  
+## Workflow for combining invasive plant data (2024) with a 7 class version of the national land cover of South Africa (2022), to produce an 8 class land cover raster.
 
 Date: 26 February 2026
 
 Author: A.L. Skowno
 
-### Summary 
+### Summary
 
 *This workflow combines national data on invasive plant species (2023) with a 7 class version of the national land cover of South Africa (2022). The resulting raster layer carries a CC-BY license and can be used in spatial analysis.*
 
@@ -40,11 +40,11 @@ Combine the NLC2022 and NIAPS data such that IF the land cover is "natural" (VAL
 
 **Output**
 
-File: nlc2022_8class_niaps50.tif
+File: nlc2022_8class_niaps50.tif (also \_100m)
 
 Format: GeoTiff
 
-Resolution: 20m x 20m
+Resolution: 20m x 20m (also 100m version)
 
 Projection: Albers Equal Area Conic, central meridian = 25; std parallel1 = -24; std parallel2 = -33, Spheroid = WGS84
 
