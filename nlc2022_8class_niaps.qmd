@@ -1,0 +1,144 @@
+---
+
+---
+
+### Workflow for combining NIAPS 2023 data with 7 class version of the NLC 2022
+
+Date: 20260210
+
+Author: A.L. Skowno
+
+This workflow combines national data on invasive plant species with land cover data 2022.
+
+The National Invasive Alien Plant Survey (NIAPS) run by the Department of Forestry, Fisheries and the Environment and Stellenbosch University (Kotze et al 2025), resulted in a series of raster data sets that contained distribution and abundance of selected invasie plant taxa. National Land Cover 2022 was reclassed into a simplified 7 classes for use in time series analysis. This workflow combines the 7 class nlc 2022 with the NIAPS data.
+
+```{r}
+#load packages  
+library(terra) 
+library(tidyverse)
+library(sf)
+library(PROJ)
+```
+
+### Data sources & import:
+
+South African National Land Cover data set for 2022 (prepared by the National Department of Forestry, Fisheries and the Environment). The 72 classes were are reclassified to 7 classes as follows:
+
+1.  = natural or near natural ecosystem classes
+
+2.  = secondary natural area (old fields, abandonded land, in an additional step - all pixels that were cropland or mine or built up between 1990 and 2020) but in 2022 are reflected as "natural" - are reclassified to this class.)
+
+3.  = artificial water body (dams and water treatment)
+
+4.  = built up (rural villages, urban, industrial, commercial and infrastructure, including small holdings)
+
+5.  = cropland (commercial and subsistence and mixed farming of field crops and horticultural crops, also some intensive farming locations like feedlots - though some classified as built up)
+
+6.  = mines and some mine tailings dams
+
+7.  = plantation forestry (alien timber and pulp plantations and non commercial woodlots, including some windbreaks
+
+National Invasive Alien Plant Survey (NIAPS) ([Kotzé et al. 2025](#0)) estimated the extent of the most-widespread & abundant, terrestrial invasive alien plant taxa (approx. 32 species) in South Africa. Data were downloaded from an ARCPRO package available [here](#0). Each raster has pixel values (0-100) that represent the area invaded divided by condensed area invaded for 32 Invasive plant taxa organised into 13 rasters. Values of 100 represent 100% invasion (effectively 100% canopy cover of the specific invasive species) (see [Marais et al. 2004](https://journals.co.za/doi/10.10520/EJC96205)) for explanation of the concept of "condensed area"). Note the data is unprojected (EPSG 4326).
+
+```{r}
+### Data sources & import:
+
+# Base data path from .Renviron
+data_path <- Sys.getenv("DATA")
+
+# Locate the required files in the DATA folder and construct a file paths to them
+
+lc2022_fp <- list.files(path = data_path, 
+                           pattern = "^nlc2022_7class\\.tif$",
+                           recursive = TRUE,
+                           full.names = TRUE)
+
+# Read in the file using terra package
+lc2022 <- rast(lc2022_fp)  
+
+
+# Note  all LC products use  WGS84 Albers Equal Area, central meridian = 25; std parallel1 = -24; std parallel2 = -33). Use Tif version as this is processed faster by R terra
+
+```
+
+```{r}
+
+
+# Species prefixes
+species <- c(
+  "AcacCycl", "AcacSali", "ArunDona", "ChroOdor",
+  "EucaSpec", "HakeSpec", "LantCama", "MeliAzed",
+  "OpunSpec", "PinuSpec", "PopuSpec", "ProsSpec",
+  "SolaMaur", "WattSpec"
+)
+
+# Function to find and read raster
+read_species <- function(sp) {
+  fp <- list.files(
+    path = data_path,
+    pattern = paste0("^", sp, "_CombAllplus\\.tif$"),
+    recursive = TRUE,
+    full.names = TRUE
+  )
+rast(fp)
+}
+
+# Read all species into a named list
+species_rasters <- setNames(lapply(species, read_species), species)
+
+
+```
+
+#### Data preparation
+
+Each raster in the NIAPS dataset has pixels values of 0-100, effectively representing the percentage invasive species canopy cover. Summing the rasters results in an overall invasive canopy cover value for each pixel. Pixels with summed values greater than 100 are considered 100% invaded. The summed results are then binned into 10 invasion classes. To proceed with analysis the summed invasive raster is then resampled to match the landcover data .
+
+```{r}
+# Build a combined invasive plant % canopy cover raster based on the sum of all the NIAPS species / genera rasters
+
+niaps_stack <- rast(species_rasters)
+niaps_sum <- sum(niaps_stack)
+
+# Project to ALbers snapped to LC2022
+niaps_sum <- project(niaps_sum, lc2022, method = "near")
+
+# Define reclassification bins - each row represents: [min, max, new_value]
+reclass_niaps <- matrix(c(
+  0, 1 , 0,
+  1, 10, 1,
+  10, 20, 2,
+  20, 30, 3,
+  30, 40, 4,
+  40, 50, 5, 
+  50, 60, 6, 
+  60, 70, 7, 
+  70, 80, 8, 
+  80, 90, 9, 
+  90, 200, 10
+), ncol = 3, byrow = TRUE)
+
+# Reclassify the summed invasives data using the matrix
+niaps_sum_rc <- classify(niaps_sum, rcl = reclass_niaps)
+
+# Large raster outputs are written to the directory defined in the DATA environment variable.
+ 
+  # Define subfolder
+out_dir <- file.path(data_path, "R_outputs")
+   # Set output file path and name
+outfile <- file.path(out_dir, "niaps_sum_rc.tif")
+   # Write a compressed Geo Tiff
+writeRaster(niaps_sum_rc, outfile, datatype = "INT1U", gdal = c("COMPRESS=LZW"), overwrite = TRUE)
+
+```
+
+#### Analysis
+
+Combine the NLC2022 and NIAPS data such that if the land cover is "natural" (VALUE =1) and the NIAPS value is greater than or equal to 5 (ie 50% canopy cover of invasive plants or greater)
+
+```{r}
+# combine the rasters such that if lc = 1  AND inv >= 5 then value in new raster = 8, else use value of lc. This creates a 8 class land cover 1=nat, 2=secnat, 3=artwater, 4=built, 5=crop, 6=mine, 7=plant, 8=invaded(50% cc or more)
+
+lc2022_niaps50 <-  ifel(niaps_aea_rc >= 5 & lc2022 == 1, 8, lc2022)
+
+writeRaster(lc2022_niaps50, "C:/Users/skownoa/Dropbox/NBAwork/RLEworking/Invasives/lc2022_niaps50.tif", datatype = "INT1U", gdal = c("COMPRESS=LZW"), overwrite = TRUE)
+```
