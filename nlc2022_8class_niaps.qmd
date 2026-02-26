@@ -1,6 +1,6 @@
----
+------------------------------------------------------------------------
 
----
+------------------------------------------------------------------------
 
 ### Workflow for combining NIAPS 2023 data with 7 class version of the NLC 2022
 
@@ -10,33 +10,13 @@ Author: A.L. Skowno
 
 This workflow combines national data on invasive plant species with land cover data 2022.
 
-The National Invasive Alien Plant Survey (NIAPS) run by the Department of Forestry, Fisheries and the Environment and Stellenbosch University (Kotze et al 2025), resulted in a series of raster data sets that contained distribution and abundance of selected invasie plant taxa. National Land Cover 2022 was reclassed into a simplified 7 classes for use in time series analysis. This workflow combines the 7 class nlc 2022 with the NIAPS data.
-
 ```{r}
 #load packages  
 library(terra) 
 library(tidyverse)
-library(sf)
-library(PROJ)
 ```
 
-### Data sources & import:
-
-South African National Land Cover data set for 2022 (prepared by the National Department of Forestry, Fisheries and the Environment). The 72 classes were are reclassified to 7 classes as follows:
-
-1.  = natural or near natural ecosystem classes
-
-2.  = secondary natural area (old fields, abandonded land, in an additional step - all pixels that were cropland or mine or built up between 1990 and 2020) but in 2022 are reflected as "natural" - are reclassified to this class.)
-
-3.  = artificial water body (dams and water treatment)
-
-4.  = built up (rural villages, urban, industrial, commercial and infrastructure, including small holdings)
-
-5.  = cropland (commercial and subsistence and mixed farming of field crops and horticultural crops, also some intensive farming locations like feedlots - though some classified as built up)
-
-6.  = mines and some mine tailings dams
-
-7.  = plantation forestry (alien timber and pulp plantations and non commercial woodlots, including some windbreaks
+South African National Land Cover data set for 2022 (prepared by the National Department of Forestry, Fisheries and the Environment). The 72 classes were are reclassified to 7 classes
 
 National Invasive Alien Plant Survey (NIAPS) ([Kotzé et al. 2025](#0)) estimated the extent of the most-widespread & abundant, terrestrial invasive alien plant taxa (approx. 32 species) in South Africa. Data were downloaded from an ARCPRO package available [here](#0). Each raster has pixel values (0-100) that represent the area invaded divided by condensed area invaded for 32 Invasive plant taxa organised into 13 rasters. Values of 100 represent 100% invasion (effectively 100% canopy cover of the specific invasive species) (see [Marais et al. 2004](https://journals.co.za/doi/10.10520/EJC96205)) for explanation of the concept of "condensed area"). Note the data is unprojected (EPSG 4326).
 
@@ -63,8 +43,7 @@ lc2022 <- rast(lc2022_fp)
 
 ```{r}
 
-
-# Species prefixes
+# Species prefixes for each NIAPS dataset
 species <- c(
   "AcacCycl", "AcacSali", "ArunDona", "ChroOdor",
   "EucaSpec", "HakeSpec", "LantCama", "MeliAzed",
@@ -72,7 +51,7 @@ species <- c(
   "SolaMaur", "WattSpec"
 )
 
-# Function to find and read raster
+# Function to find and read each raster
 read_species <- function(sp) {
   fp <- list.files(
     path = data_path,
@@ -83,7 +62,7 @@ read_species <- function(sp) {
 rast(fp)
 }
 
-# Read all species into a named list
+# Read all rasters into a named list
 species_rasters <- setNames(lapply(species, read_species), species)
 
 
@@ -99,8 +78,15 @@ Each raster in the NIAPS dataset has pixels values of 0-100, effectively represe
 niaps_stack <- rast(species_rasters)
 niaps_sum <- sum(niaps_stack)
 
-# Project to ALbers snapped to LC2022
-niaps_sum <- project(niaps_sum, lc2022, method = "near")
+# Project to Albers and snap to LC2022 - this is upsampling as the NIAPS data is closer to 90m resolution, but justified in that it is better retain the detail of the 20m pixels for all other classes (1-7) in the land cover.
+
+niaps_sum <- project( niaps_sum, lc2022, method = "near", align = TRUE
+)
+
+# Resample to match extents exactly to allow later fucntions
+
+niaps_sum <- resample(niaps_sum, lc2022, method = "near")
+
 
 # Define reclassification bins - each row represents: [min, max, new_value]
 reclass_niaps <- matrix(c(
@@ -129,16 +115,21 @@ outfile <- file.path(out_dir, "niaps_sum_rc.tif")
    # Write a compressed Geo Tiff
 writeRaster(niaps_sum_rc, outfile, datatype = "INT1U", gdal = c("COMPRESS=LZW"), overwrite = TRUE)
 
+# niaps_sum_rc <- rast("C:/Users/skownoa/Dropbox/NBAwork/R_outputs/niaps_sum_rc.tif")
 ```
 
 #### Analysis
 
-Combine the NLC2022 and NIAPS data such that if the land cover is "natural" (VALUE =1) and the NIAPS value is greater than or equal to 5 (ie 50% canopy cover of invasive plants or greater)
+Combine the NLC2022 and NIAPS data such that IF the land cover is "natural" (VALUE =1) AND the NIAPS value is greater than or equal to 5 (ie 50% canopy cover of invasive plants or greater) THEN pixel is categorised as "invaded" (assigned VALUE = 8) for pixels values greater than 1 (all other land cover classes) ELSE the pixel retains its NLC2022 value.
 
 ```{r}
-# combine the rasters such that if lc = 1  AND inv >= 5 then value in new raster = 8, else use value of lc. This creates a 8 class land cover 1=nat, 2=secnat, 3=artwater, 4=built, 5=crop, 6=mine, 7=plant, 8=invaded(50% cc or more)
+# Combine the rasters such that if lc = 1  AND inv >= 5 then value in new raster = 8, else use value of lc. This creates a 8 class land cover 1=nat, 2=secnat, 3=artwater, 4=built, 5=crop, 6=mine, 7=plant, 8=invaded(50% cc or more)
 
-lc2022_niaps50 <-  ifel(niaps_aea_rc >= 5 & lc2022 == 1, 8, lc2022)
+lc2022_8class_niaps50 <-  ifel(niaps_sum_rc >= 5 & lc2022 == 1, 8, lc2022)
 
-writeRaster(lc2022_niaps50, "C:/Users/skownoa/Dropbox/NBAwork/RLEworking/Invasives/lc2022_niaps50.tif", datatype = "INT1U", gdal = c("COMPRESS=LZW"), overwrite = TRUE)
+# Set output file path and name (out dir previously defined)
+outfile <- file.path(out_dir, "lc2022_8class_niaps50.tif")
+
+# Write a compressed Geo Tiff
+writeRaster(lc2022_8class_niaps50, outfile, datatype = "INT1U", gdal = c("COMPRESS=LZW"), overwrite = TRUE)
 ```
