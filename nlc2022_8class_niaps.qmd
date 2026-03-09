@@ -117,16 +117,16 @@ lc2022_8class_niaps50_100m <- aggregate(lc2022_8class_niaps50, fact = 5, fun = "
 out_dir <- file.path(data_path, "R_outputs")
 
 # Set output file path and name (out dir previously defined)
-outfile <- file.path(out_dir, "lc2022_8class_niaps50_100m.tif")
+outfile1 <- file.path(out_dir, "lc2022_8class_niaps50_100m.tif")
 # Write a compressed Geo Tiff
 
-writeRaster(lc2022_8class_niaps50_100m, outfile, datatype = "INT1U", gdal = c("COMPRESS=LZW"), overwrite = TRUE)
+writeRaster(lc2022_8class_niaps50_100m, outfile1, datatype = "INT1U", gdal = c("COMPRESS=LZW"), overwrite = TRUE)
 
 #output the 20m version 
 # Set output file path and name (out dir previously defined)
 
-outfile <- file.path(out_dir, "lc2022_8class_niaps50.tif")
+outfile2 <- file.path(out_dir, "lc2022_8class_niaps50.tif")
 # Write a compressed Geo Tiff
 
-writeRaster(lc2022_8class_niaps50, outfile, datatype = "INT1U", gdal = c("COMPRESS=LZW"), overwrite = TRUE)
+writeRaster(lc2022_8class_niaps50, outfile2, datatype = "INT1U", gdal = c("COMPRESS=LZW"), overwrite = TRUE)
 ```

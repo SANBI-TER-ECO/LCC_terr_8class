@@ -1,0 +1,147 @@
+### Workflow for producing a 9 class land cover raster that includes ecosystem condition data (and invasive plant data)
+
+This workflow combines national data on ecosystem condition with invasive plant species and land cover data 2022.
+
+```{r}
+#load packages  
+library(terra) 
+library(tidyverse)
+```
+
+```{r}
+### Set up data sources & import land cover:
+
+# Base data path from .Renviron
+data_path <- Sys.getenv("DATA")
+
+# Locate the required files in the DATA folder and construct a file paths to them
+
+nlc8_fp <- list.files(path = data_path, 
+                           pattern = "^lc2022_8class_niaps50\\.tif$",
+                           recursive = TRUE,
+                           full.names = TRUE)
+
+# Read in the file using terra package
+nlc8 <- rast(nlc8_fp)  
+
+
+# Note  all LC products use  WGS84 Albers Equal Area, central meridian = 25; std parallel1 = -24; std parallel2 = -33). Use Tif version as this is processed faster by R terra
+
+```
+
+```{r}
+# Import the Ecosystem Condition Rasters
+
+# Add City of Cape Town Land Cover and Condition 2023 (prepared in ARCGIS PRO), where 0 = inside AOI but no value assigned, 4 = notnat, 2 = sec nat, 8 = severely degraded. 
+coct_path <- list.files(
+  path = data_path,
+  pattern = "^coct_cond10\\.tif$",
+  recursive = TRUE,
+  full.names = TRUE,
+  ignore.case = TRUE
+)
+
+coct <- terra::rast(coct_path)
+coct <- resample(coct, nlc8, method = "near") #  match extent
+#############
+
+# Add NMB Data (prepared in ARCGIS PRO), where 0 = inside AOI but no value assigned, 8 = severely degraded 80%) (ignore value 4 as this is built up areas and national land cover is judged to be a better source of extent data). 
+nmb_path <- list.files(
+  path = data_path,
+  pattern = "^nmb_lcdeg2\\.tif$",
+  recursive = TRUE,
+  full.names = TRUE,
+  ignore.case = TRUE
+)
+
+nmb <- terra::rast(nmb_path)
+nmb <- resample(nmb, nlc8, method = "near") #  match extent
+###############
+# Add STEP Data (prepared in ARCGIS PRO), where 0 = inside AOI but no value assigned, 8 = severely degraded 80%). 
+
+step_path <- list.files(
+  path = data_path,
+  pattern = "^step_deg2\\.tif$",
+  recursive = TRUE,
+  full.names = TRUE,
+  ignore.case = TRUE
+)
+
+step <- terra::rast(step_path)
+step <- resample(step, nlc8, method = "near") #  match extent
+###########
+# Add Little Karoo degradation data 2009 (prepared in ARCGIS PRO), where 0 = inside AOI but level of degradation < that 80%; where 8 = severely degraded >= 80%). 
+lk_path <- list.files(
+  path = data_path,
+  pattern = "^littlekaroo_deg4\\.tif$",
+  recursive = TRUE,
+  full.names = TRUE,
+  ignore.case = TRUE
+)
+
+lk <- terra::rast(lk_path)
+lk <- resample(lk, nlc8, method = "near") #  match extent
+###########
+
+# Add Hardeveld degradation data (prepared in ARCGIS PRO), where 0 = inside AOI but level of degradation < that 80%; where 8 = severely degraded >= 80%). 
+hv_path <- list.files(
+  path = data_path,
+  pattern = "^hv_bell\\.tif$",
+  recursive = TRUE,
+  full.names = TRUE,
+  ignore.case = TRUE
+)
+
+hv <- terra::rast(hv_path)
+hv <- resample(hv, nlc8, method = "near") #  match extent
+##########
+
+# Add Little Karoo degradation data (prepared in ARCGIS PRO), where 0 = inside AOI but level of degradation < that 80%; where 8 = severely degraded >= 80%). 
+
+lkkir_path <- list.files(
+  path = data_path,
+  pattern = "^lk_kirsten\\.tif$",
+  recursive = TRUE,
+  full.names = TRUE,
+  ignore.case = TRUE
+)
+
+lkk <- terra::rast(lkkir_path)
+lkk <- resample(lk, nlc8, method = "near") #  match extent
+
+```
+
+#### Analysis
+
+Combine the 8 class national land cover with the various ecosystem condition data sets such that IF the 8 class land cover is "natural" (VALUE =1) AND the ecosystem condition for any of the rasters "degraded" (VALUE = 8) THEN pixel is categorised as "degraded" (VALUE = 9) ELSE for pixels values greater than 1 (all other land cover classes) the pixel retains its NLC2022 value.
+
+```{r}
+# Combine the rasters such that if nlc8 = 1  AND cond = 8 then value in new raster = 9, else use value of nlc8. This creates a 9 class land cover 1=nat, 2=secnat, 3=artwater, 4=built, 5=crop, 6=mine, 7=plant, 8=invaded (50% cc or more) 9 = severe degradation (overgrazing) 
+
+lc2022_9class_niaps_cond <- ifel(
+  (nlc8 == 1) & ((coct == 8) | (step == 8) | (lk == 8) | (lkk == 8)| (hv == 8) | (nmb == 8)),
+  9,
+  nlc8
+)
+
+# Aggregate to 100m resolution 
+lc2022_9class_niaps_cond_100m <- aggregate(lc2022_9class_niaps_cond, fact = 5, fun = "modal", na.rm = TRUE)
+
+  # output 100m version 
+  # Define subfolder
+out_dir <- file.path(data_path, "R_outputs")
+
+# Set output file path and name (out dir previously defined)
+outfile1 <- file.path(out_dir, "lc2022_9class_niaps_cond_100m.tif")
+# Write a compressed Geo Tiff
+
+writeRaster(lc2022_9class_niaps_cond_100m, outfile1, datatype = "INT1U", gdal = c("COMPRESS=LZW"), overwrite = TRUE)
+
+#output the 20m version 
+# Set output file path and name (out dir previously defined)
+
+outfile2 <- file.path(out_dir, "lc2022_9class_niaps_cond.tif")
+# Write a compressed Geo Tiff
+
+writeRaster(lc2022_9class_niaps_cond, outfile2, datatype = "INT1U", gdal = c("COMPRESS=LZW"), overwrite = TRUE)
+```
