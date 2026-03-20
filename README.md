@@ -4,6 +4,8 @@ Date: 26 February 2026
 
 Author: A.L. Skowno
 
+DOI: https://zenodo.org/records/19125515 
+
 ### Summary
 
 *This workflow combines national data on invasive plant species (2023) with a 7 class version of the national land cover of South Africa (2022). The resulting raster has 8 classes (nlc2022_8class_niaps.qmd). This 8 class raster is then combined with various ecosystem condition data sets to make a 9 class national land cover raster (nlc2022_9class_niaps_cond.qmd).*
@@ -41,6 +43,7 @@ Combine the 7 class national land cover 2022 and NIAPS data such that IF the 7 c
 Combine the 8 class national land cover (above) with each condition layer sequentially such that if the 8 class nlc is "natural" (VALUE = 1) AND any of the condition layers are severely degraded (VALUE = 8), THEN pixel is recoded as "severely degraded" (VALUE = 9).
 
 #### **Output**
+Available at  https://zenodo.org/records/19125515 
 
 **File: nlc2022_8class_niaps50.tif**
 
